@@ -1,0 +1,21 @@
+[package]
+name = "magic-opener"
+version = "1.0.0"
+edition = "2021"
+readme = "README.md"
+license = "MIT"
+keywords = ["git"]
+authors = ["Dan Sully"]
+repository = "https://github.com/dsully/magic-opener"
+homepage = "https://github.com/dsully/magic-opener"
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "magic-opener"
+path = "main.rs"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+git2 = { version = "0.17.2", default_features = false, features = [ "vendored-libgit2" ] }
+git-url-parse = "0.4"
+open = "5"
