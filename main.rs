@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         _ => ".",
     };
 
-    let repository = Repository::open(path).unwrap_or_else(|_| {
+    let repository = Repository::discover(path).unwrap_or_else(|_| {
         println!("Unable to open repository at path: {:?}", path);
         process::exit(1);
     });
