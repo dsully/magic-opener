@@ -19,5 +19,5 @@ cargo install --git https://github.com/dsully/magic-opener
 ## Usage
 
 ```shell
-magic-opener [--print] <path>
+open [--print] <path>
 ```

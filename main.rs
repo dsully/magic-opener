@@ -1,60 +1,112 @@
-use clap::Parser;
-use git2::Repository;
-use git_url_parse::GitUrl;
-use std::{error::Error, process};
+use std::env;
+use std::io::{stdout, Write};
+use std::net::TcpStream;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
+use anyhow::{Context, Result};
+use clap::Parser;
+use parse_git_url::GitUrl;
+use shellexpand::tilde;
+
+const LOCALHOST: &str = "localhost";
+const OPEN: &str = "/usr/bin/open";
+const PORT: u16 = 2226;
 const REMOTE_NAME: &str = "origin";
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Cli {
+#[clap(author, version, about, long_about = None, disable_help_flag = true)]
+#[allow(clippy::upper_case_acronyms)]
+struct CLI {
     #[clap(short, long, help = "Print the URL to stdout instead of opening it.")]
     print: bool,
 
-    #[clap(help = "Path to a Git repository. Otherwise the current directory will be used.")]
+    #[clap(
+        allow_hyphen_values = true,
+        help = "Path to a Git repository. Otherwise the current directory will be used."
+    )]
     path: Option<String>,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args = Cli::parse();
+fn git_url() -> Option<String> {
+    Command::new("git")
+        .args(["remote", "get-url", REMOTE_NAME])
+        .stderr(Stdio::inherit())
+        .output()
+        .ok()
+        .and_then(|output| GitUrl::parse(String::from_utf8_lossy(&output.stdout).trim_end()).ok())
+        .and_then(|parsed| {
+            parsed
+                .host
+                .map(|host| format!("https://{}/{}", host, parsed.fullname))
+        })
+}
 
-    let path = match &args.path {
-        Some(path) => path,
-        _ => ".",
+fn main() -> Result<()> {
+    let args = CLI::parse();
+
+    let current_dir = env::current_dir().context("Failed to get current directory")?;
+    let remote_path = args
+        .path
+        .or_else(git_url)
+        .map(PathBuf::from)
+        .unwrap_or(current_dir);
+
+    let remote_path = if remote_path.to_string_lossy() == "." {
+        env::current_dir().context("Failed to get current directory")?
+    } else {
+        remote_path
     };
 
-    let repository = Repository::discover(path).unwrap_or_else(|_| {
-        println!("Unable to open repository at path: {:?}", path);
-        process::exit(1);
-    });
+    let remote_path_str = remote_path.to_string_lossy();
 
-    let remote = repository.find_remote(REMOTE_NAME).unwrap_or_else(|e| {
-        println!("Could not retrieve remote: {}", e);
-        process::exit(1);
-    });
+    if remote_path_str.starts_with('-') {
+        let command = match remote_path_str.as_ref() {
+            "--help" => "-h",
+            _ => remote_path_str.as_ref(),
+        };
 
-    let remote_url = remote.url().unwrap_or_else(|| {
-        println!("Could not retrieve remote url.");
-        process::exit(1);
-    });
+        let output = Command::new(OPEN)
+            .arg(command)
+            .stderr(Stdio::inherit())
+            .output()?;
 
-    let parsed = GitUrl::parse(remote_url).unwrap_or_else(|e| {
-        println!("Could not parse the git remote url: {}", e);
-        process::exit(1);
-    });
+        stdout().write_all(&output.stderr)?;
 
-    let url = match parsed.host {
-        Some(host) => format!("https://{}/{}", host, parsed.fullname),
-        None => {
-            println!("Did not match any patterns for remote: {}", remote_url);
-            process::exit(1);
+        return Ok(());
+    }
+
+    let ssh_tty = env::var_os("SSH_TTY").is_some();
+    let client_home = env::var("SSH_CLIENT_HOME")
+        .context("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.")?;
+
+    let remote_path = if remote_path_str.contains("://") {
+        remote_path_str.into_owned()
+    } else if ssh_tty {
+        let expanded_path = tilde(&remote_path_str);
+
+        if expanded_path.starts_with("/bits") {
+            format!("{}/Mounts{}", client_home, expanded_path)
+        } else {
+            expanded_path.into_owned()
         }
+    } else {
+        remote_path_str.into_owned()
     };
 
     if args.print {
-        println!("{}", url);
+        println!("{}", remote_path);
+    } else if ssh_tty {
+        let mut stream = TcpStream::connect((LOCALHOST, PORT))
+            .context("Unable to create a socket for localhost:2226")?;
+
+        stream
+            .write_all(remote_path.as_bytes())
+            .context("Couldn't write remote path to socket.")?;
     } else {
-        open::that(url)?
+        Command::new(OPEN)
+            .args(["--background", &remote_path])
+            .spawn()?;
     }
 
     Ok(())
