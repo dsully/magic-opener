@@ -17,9 +17,5 @@ path = "main.rs"
 [dependencies]
 anyhow = "1"
 clap = { version = "4.4", features = [ "derive" ] }
-log = "0"
 parse-git-url = "^0.5"
 shellexpand = "3"
-simple_logger = { version = "^4", default_features = false, features = [
-    "colored",
-] }
