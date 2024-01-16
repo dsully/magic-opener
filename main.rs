@@ -1,7 +1,6 @@
 use std::env;
 use std::io::{stdout, Write};
 use std::net::TcpStream;
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
@@ -23,9 +22,11 @@ struct CLI {
 
     #[clap(
         allow_hyphen_values = true,
+        trailing_var_arg = true,
+        required = false,
         help = "Path to a Git repository. Otherwise the current directory will be used."
     )]
-    path: Option<String>,
+    path: Vec<String>,
 }
 
 fn git_url() -> Option<String> {
@@ -45,29 +46,32 @@ fn git_url() -> Option<String> {
 fn main() -> Result<()> {
     let args = CLI::parse();
 
-    let current_dir = env::current_dir().context("Failed to get current directory")?;
-    let remote_path = args
-        .path
-        .or_else(git_url)
-        .map(PathBuf::from)
-        .unwrap_or(current_dir);
+    let current_dir = env::current_dir()
+        .context("Failed to get current directory")?
+        .to_string_lossy()
+        .to_string();
 
-    let remote_path = if remote_path.to_string_lossy() == "." {
-        env::current_dir().context("Failed to get current directory")?
+    let remote_path = if args.path.is_empty() {
+        match git_url() {
+            Some(url) => url,
+            None => current_dir.to_owned(),
+        }
     } else {
-        remote_path
+        match args.path.join(" ") {
+            path if path == "." => current_dir.to_owned(),
+            path => path,
+        }
     };
 
-    let remote_path_str = remote_path.to_string_lossy();
-
-    if remote_path_str.starts_with('-') {
-        let command = match remote_path_str.as_ref() {
-            "--help" => "-h",
-            _ => remote_path_str.as_ref(),
+    if remote_path.starts_with('-') {
+        let command = if remote_path == "--help" {
+            vec!["-h"]
+        } else {
+            args.path.iter().map(String::as_str).collect()
         };
 
         let output = Command::new(OPEN)
-            .arg(command)
+            .args(command)
             .stderr(Stdio::inherit())
             .output()?;
 
@@ -80,10 +84,10 @@ fn main() -> Result<()> {
     let client_home = env::var("SSH_CLIENT_HOME")
         .context("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.")?;
 
-    let remote_path = if remote_path_str.contains("://") {
-        remote_path_str.into_owned()
+    let remote_path = if remote_path.contains("://") {
+        remote_path.to_owned()
     } else if ssh_tty {
-        let expanded_path = tilde(&remote_path_str);
+        let expanded_path = tilde(&remote_path);
 
         if expanded_path.starts_with("/bits") {
             format!("{}/Mounts{}", client_home, expanded_path)
@@ -91,7 +95,7 @@ fn main() -> Result<()> {
             expanded_path.into_owned()
         }
     } else {
-        remote_path_str.into_owned()
+        remote_path.to_owned()
     };
 
     if args.print {
