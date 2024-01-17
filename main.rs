@@ -81,12 +81,14 @@ fn main() -> Result<()> {
     }
 
     let ssh_tty = env::var_os("SSH_TTY").is_some();
-    let client_home = env::var("SSH_CLIENT_HOME")
-        .context("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.")?;
 
     let remote_path = if remote_path.contains("://") {
         remote_path.to_owned()
     } else if ssh_tty {
+        //
+        let client_home = env::var("SSH_CLIENT_HOME")
+            .context("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.")?;
+
         let expanded_path = tilde(&remote_path);
 
         if expanded_path.starts_with("/bits") {
