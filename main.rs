@@ -32,7 +32,8 @@ struct CLI {
 fn git_url() -> Option<String> {
     Command::new("git")
         .args(["remote", "get-url", REMOTE_NAME])
-        .stderr(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .output()
         .ok()
         .and_then(|output| GitUrl::parse(String::from_utf8_lossy(&output.stdout).trim_end()).ok())
@@ -110,9 +111,13 @@ fn main() -> Result<()> {
             .write_all(remote_path.as_bytes())
             .context("Couldn't write remote path to socket.")?;
     } else {
-        Command::new(OPEN)
-            .args(["--background", &remote_path])
-            .spawn()?;
+        let mut args = vec![remote_path.as_str()];
+
+        if remote_path.contains("://") {
+            args.insert(0, "--background");
+        }
+
+        Command::new(OPEN).args(&args).spawn()?;
     }
 
     Ok(())
