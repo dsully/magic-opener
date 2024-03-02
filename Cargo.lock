@@ -51,12 +51,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.75"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -199,7 +193,6 @@ dependencies = [
 name = "magic-opener"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "clap",
  "parse-git-url",
  "shellexpand",

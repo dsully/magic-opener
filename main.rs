@@ -1,9 +1,8 @@
 use std::env;
 use std::io::{stdout, Write};
 use std::net::TcpStream;
-use std::process::{Command, Stdio};
+use std::process::{self, Command, Stdio};
 
-use anyhow::{Context, Result};
 use clap::Parser;
 use parse_git_url::GitUrl;
 use shellexpand::tilde;
@@ -44,11 +43,11 @@ fn git_url() -> Option<String> {
         })
 }
 
-fn main() -> Result<()> {
+fn main() {
     let args = CLI::parse();
 
     let current_dir = env::current_dir()
-        .context("Failed to get current directory")?
+        .expect("Failed to get current directory")
         .to_string_lossy()
         .to_string();
 
@@ -74,11 +73,14 @@ fn main() -> Result<()> {
         let output = Command::new(OPEN)
             .args(command)
             .stderr(Stdio::inherit())
-            .output()?;
+            .output()
+            .expect("Failed to run command");
 
-        stdout().write_all(&output.stderr)?;
+        stdout()
+            .write_all(&output.stderr)
+            .expect("Failed to write to stdout");
 
-        return Ok(());
+        process::exit(0);
     }
 
     let ssh_tty = env::var_os("SSH_TTY").is_some();
@@ -88,7 +90,7 @@ fn main() -> Result<()> {
     } else if ssh_tty {
         //
         let client_home = env::var("SSH_CLIENT_HOME")
-            .context("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.")?;
+            .expect("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.");
 
         let expanded_path = tilde(&remote_path);
 
@@ -105,11 +107,11 @@ fn main() -> Result<()> {
         println!("{}", remote_path);
     } else if ssh_tty {
         let mut stream = TcpStream::connect((LOCALHOST, PORT))
-            .context("Unable to create a socket for localhost:2226")?;
+            .expect("Unable to create a socket for localhost:2226");
 
         stream
             .write_all(remote_path.as_bytes())
-            .context("Couldn't write remote path to socket.")?;
+            .expect("Couldn't write remote path to socket.");
     } else {
         let mut args = vec![remote_path.as_str()];
 
@@ -117,8 +119,9 @@ fn main() -> Result<()> {
             args.insert(0, "--background");
         }
 
-        Command::new(OPEN).args(&args).spawn()?;
+        Command::new(OPEN)
+            .args(&args)
+            .spawn()
+            .expect("Failed to open URL");
     }
-
-    Ok(())
 }

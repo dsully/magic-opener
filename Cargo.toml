@@ -15,7 +15,6 @@ name = "open"
 path = "main.rs"
 
 [dependencies]
-anyhow = "1"
 clap = { version = "4.4", features = [ "derive" ] }
 parse-git-url = "^0.5"
 shellexpand = "3"
@@ -31,7 +30,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.9.0"
+cargo-dist-version = "0.11.1"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
