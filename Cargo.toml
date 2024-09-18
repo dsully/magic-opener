@@ -1,6 +1,7 @@
 [package]
 authors = [ "Dan Sully" ]
 categories = [ "command-line-utilities" ]
+description = "An 'open' replacement that tries to do the right thing."
 edition = "2021"
 homepage = "https://github.com/dsully/magic-opener"
 keywords = [ "git" ]
@@ -8,14 +9,14 @@ license = "MIT"
 name = "magic-opener"
 readme = "README.md"
 repository = "https://github.com/dsully/magic-opener"
-version = "0.0.2"
+version = "0.0.3"
 
 [[bin]]
 name = "open"
 path = "main.rs"
 
 [dependencies]
-clap = { version = "4.4", features = [ "derive" ] }
+clap = { version = "^4.5", features = [ "derive" ] }
 parse-git-url = "^0.5"
 shellexpand = "3"
 
@@ -30,20 +31,20 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.11.1"
+cargo-dist-version = "0.22.1"
 # CI backends to support
-ci = ["github"]
+ci = "github"
 # The installers to generate for each app
-installers = ["homebrew"]
+installers = [ "homebrew" ]
 # A GitHub repo to push Homebrew formulas to
 tap = "dsully/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = [ "aarch64-apple-darwin", "x86_64-unknown-linux-gnu" ]
 # Publish jobs to run in CI
-publish-jobs = ["homebrew"]
-# Publish jobs to run in CI
+publish-jobs = [ "homebrew" ]
+# Which actions to run on pull requests
 pr-run-mode = "plan"
 
-# Use Apple Silicon runners.
-[workspace.metadata.dist.github-custom-runners]
-aarch64-apple-darwin = "macos-14"
+  # Use Apple Silicon runners.
+  [workspace.metadata.dist.github-custom-runners]
+  aarch64-apple-darwin = "macos-14"

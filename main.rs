@@ -1,3 +1,17 @@
+#![deny(clippy::all, clippy::pedantic, clippy::unwrap_used)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+
+    // Ignore clippy for the generated file from shadow-rs.
+    // https://github.com/baoyachi/shadow-rs/issues/151
+    clippy::non_ascii_literal,
+    clippy::print_stdout,
+    clippy::needless_raw_strings,
+    clippy::needless_raw_string_hashes
+)]
+
 use std::env;
 use std::io::{stdout, Write};
 use std::net::TcpStream;
@@ -54,11 +68,11 @@ fn main() {
     let remote_path = if args.path.is_empty() {
         match git_url() {
             Some(url) => url,
-            None => current_dir.to_owned(),
+            None => current_dir.clone(),
         }
     } else {
         match args.path.join(" ") {
-            path if path == "." => current_dir.to_owned(),
+            path if path == "." => current_dir.clone(),
             path => path,
         }
     };
@@ -86,7 +100,7 @@ fn main() {
     let ssh_tty = env::var_os("SSH_TTY").is_some();
 
     let remote_path = if remote_path.contains("://") {
-        remote_path.to_owned()
+        remote_path.clone()
     } else if ssh_tty {
         //
         let client_home = env::var("SSH_CLIENT_HOME")
@@ -95,16 +109,16 @@ fn main() {
         let expanded_path = tilde(&remote_path);
 
         if expanded_path.starts_with("/bits") {
-            format!("{}/Mounts{}", client_home, expanded_path)
+            format!("{client_home}/Mounts{expanded_path}")
         } else {
             expanded_path.into_owned()
         }
     } else {
-        remote_path.to_owned()
+        remote_path.clone()
     };
 
     if args.print {
-        println!("{}", remote_path);
+        println!("{remote_path}");
     } else if ssh_tty {
         let mut stream = TcpStream::connect((LOCALHOST, PORT))
             .expect("Unable to create a socket for localhost:2226");
