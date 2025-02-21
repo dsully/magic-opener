@@ -15,6 +15,7 @@
 use std::env;
 use std::io::{stdout, Write};
 use std::net::TcpStream;
+use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
 
 use clap::Parser;
@@ -133,9 +134,8 @@ fn main() {
             args.insert(0, "--background");
         }
 
-        Command::new(OPEN)
+        let _ = Command::new(OPEN)
             .args(&args)
-            .spawn()
-            .expect("Failed to open URL");
+            .exec();
     }
 }
