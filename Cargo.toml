@@ -9,7 +9,7 @@ license = "MIT"
 name = "magic-opener"
 readme = "README.md"
 repository = "https://github.com/dsully/magic-opener"
-version = "0.1.0"
+version = "0.1.1"
 
 [[bin]]
 name = "open"
