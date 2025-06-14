@@ -18,61 +18,73 @@ use std::net::TcpStream;
 use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
 
-use clap::Parser;
-use parse_git_url::GitUrl;
-use shellexpand::tilde;
+use clap::{Arg, ArgAction, Command as ClapCommand};
+use ghrepo::LocalRepo;
 
 const LOCALHOST: &str = "localhost";
 const OPEN: &str = "/usr/bin/open";
 const PORT: u16 = 2226;
-const REMOTE_NAME: &str = "origin";
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None, disable_help_flag = true)]
-#[allow(clippy::upper_case_acronyms)]
-struct CLI {
-    #[clap(short, long, help = "Print the URL to stdout instead of opening it.")]
-    print: bool,
+fn expand_tilde(path: &str) -> String {
+    //
+    if path.starts_with("~/") || path == "~" {
+        if let Ok(home) = env::var("HOME") {
+            return path.replacen('~', &home, 1);
+        }
+    }
 
-    #[clap(
-        allow_hyphen_values = true,
-        trailing_var_arg = true,
-        required = false,
-        help = "Path to a Git repository. Otherwise the current directory will be used."
-    )]
-    path: Vec<String>,
-}
-
-fn git_url() -> Option<String> {
-    Command::new("git")
-        .args(["remote", "get-url", REMOTE_NAME])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .ok()
-        .and_then(|output| GitUrl::parse(String::from_utf8_lossy(&output.stdout).trim_end()).ok())
-        .and_then(|parsed| {
-            parsed
-                .host
-                .map(|host| format!("https://{}/{}", host, parsed.fullname))
-        })
+    path.to_string()
 }
 
 fn main() {
-    let args = CLI::parse();
+    let cli = ClapCommand::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
+        .arg(
+            Arg::new("print")
+                .short('p')
+                .long("print")
+                .help("Print the URL to stdout instead of opening it")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("path")
+                .help("Path to a Git repository (defaults to current directory)")
+                .num_args(0..)
+                .trailing_var_arg(true)
+                .allow_hyphen_values(true)
+                .value_name("PATH"),
+        );
+
+    let matches = cli.get_matches();
+
+    let paths: Vec<String> = matches
+        .get_many::<String>("path")
+        .unwrap_or_default()
+        .cloned()
+        .collect();
 
     let current_dir = env::current_dir()
         .expect("Failed to get current directory")
         .to_string_lossy()
         .to_string();
 
-    let remote_path = if args.path.is_empty() {
-        match git_url() {
-            Some(url) => url,
-            None => current_dir.clone(),
+    let remote_path = if paths.is_empty() {
+        let local = LocalRepo::new(&current_dir);
+        let branch = local.current_branch().unwrap_or("main".to_string());
+
+        let remote = local
+            .branch_upstream(&branch)
+            .ok()
+            .map_or(current_dir.clone(), |repo| repo.html_url());
+
+        match branch.as_str() {
+            "develop" | "main" | "master" => remote,
+            _ => format!("{remote}/tree/{branch}"),
         }
     } else {
-        match args.path.join(" ") {
+        match paths.join(" ") {
             path if path == "." => current_dir.clone(),
             path => path,
         }
@@ -80,9 +92,9 @@ fn main() {
 
     if remote_path.starts_with('-') {
         let command = if remote_path == "--help" {
-            vec!["-h"]
+            vec!["-h".to_string()]
         } else {
-            args.path.iter().map(String::as_str).collect()
+            paths
         };
 
         let output = Command::new(OPEN)
@@ -107,18 +119,18 @@ fn main() {
         let client_home = env::var("SSH_CLIENT_HOME")
             .expect("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.");
 
-        let expanded_path = tilde(&remote_path);
+        let expanded_path = expand_tilde(&remote_path);
 
         if expanded_path.starts_with("/bits") {
             format!("{client_home}/Mounts{expanded_path}")
         } else {
-            expanded_path.into_owned()
+            expanded_path
         }
     } else {
         remote_path.clone()
     };
 
-    if args.print {
+    if matches.get_flag("print") {
         println!("{remote_path}");
     } else if ssh_tty {
         let mut stream = TcpStream::connect((LOCALHOST, PORT))
@@ -134,8 +146,6 @@ fn main() {
             args.insert(0, "--background");
         }
 
-        let _ = Command::new(OPEN)
-            .args(&args)
-            .exec();
+        let _ = Command::new(OPEN).args(&args).exec();
     }
 }

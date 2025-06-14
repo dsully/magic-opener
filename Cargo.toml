@@ -9,16 +9,19 @@ license = "MIT"
 name = "magic-opener"
 readme = "README.md"
 repository = "https://github.com/dsully/magic-opener"
-version = "0.0.5"
+version = "0.1.0"
 
 [[bin]]
 name = "open"
 path = "main.rs"
 
 [dependencies]
-clap = { version = "^4.5", features = [ "derive" ] }
-parse-git-url = "^0.5"
-shellexpand = "3"
+clap = { version = "^4.5", default-features = false, features = [
+  "help",
+  "std",
+  "usage",
+] }
+ghrepo = "0.7"
 
 [profile.release]
 strip = "debuginfo"
