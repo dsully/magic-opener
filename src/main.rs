@@ -19,7 +19,11 @@ use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
 
 use clap::{Arg, ArgAction, Command as ClapCommand};
-use ghrepo::LocalRepo;
+
+mod parser;
+mod repo;
+
+use repo::LocalRepo;
 
 const LOCALHOST: &str = "localhost";
 const OPEN: &str = "/usr/bin/open";

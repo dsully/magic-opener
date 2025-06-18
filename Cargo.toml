@@ -1,19 +1,19 @@
 [package]
-authors = [ "Dan Sully" ]
-categories = [ "command-line-utilities" ]
-description = "An 'open' replacement that tries to do the right thing."
-edition = "2024"
-homepage = "https://github.com/dsully/magic-opener"
-keywords = [ "git" ]
-license = "MIT"
 name = "magic-opener"
+version = "0.2.0"
+authors = ["Dan Sully"]
+edition = "2024"
+description = "An 'open' replacement that tries to do the right thing."
 readme = "README.md"
+homepage = "https://github.com/dsully/magic-opener"
 repository = "https://github.com/dsully/magic-opener"
-version = "0.1.2"
+license = "MIT"
+keywords = ["git"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "open"
-path = "main.rs"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "^4.5", default-features = false, features = [
@@ -21,7 +21,9 @@ clap = { version = "^4.5", default-features = false, features = [
   "std",
   "usage",
 ] }
-ghrepo = "0.7"
+
+[dev-dependencies]
+rstest = "0"
 
 [profile.release]
 strip = "debuginfo"

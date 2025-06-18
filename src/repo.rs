@@ -1,0 +1,493 @@
+use std::cmp::Ordering;
+use std::env;
+use std::error;
+use std::fmt;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus, Stdio};
+use std::str::{self, FromStr};
+
+use crate::parser::{parse_github_url, split_owner_name};
+
+/// Error returned when trying to construct a [`GHRepo`] with invalid arguments
+/// or parse an invalid repository spec
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ParseError {
+    /// Returned by [`GHRepo::from_str`], [`GHRepo::from_url`],
+    /// [`GHRepo::from_str_with_owner`], or the `TryFrom<String> for GHRepo`
+    /// impl if given a string that is not a valid GitHub repository URL or
+    /// specifier; the field is the string in question.
+    Spec(String),
+
+    /// Returned by [`GHRepo::new`] or [`GHRepo::from_str_with_owner`] if given
+    /// an invalid GitHub repository owner name; the field is the owner name in
+    /// question.
+    Organization(String),
+
+    /// Returned by [`GHRepo::new`] if given an invalid GitHub repository name;
+    /// the field is the name in question.
+    Name(String),
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseError::Spec(s) => write!(f, "invalid GitHub repository spec: {s:?}"),
+            ParseError::Organization(s) => write!(f, "invalid GitHub repository owner: {s:?}"),
+            ParseError::Name(s) => write!(f, "invalid GitHub repository name: {s:?}"),
+        }
+    }
+}
+
+impl error::Error for ParseError {}
+
+/// A container for a GitHub repository spec, consisting of a repository
+/// *owner* and a repository *name* (sometimes also called the "repo"
+/// component).
+///
+/// A `GHRepo` instance can be constructed in the following ways:
+///
+/// - From an owner and name with [`GHRepo::new()`]
+/// - From a [`String`] of the form `{owner}/{name}` via the `TryFrom<String>`
+///   trait
+/// - From a GitHub URL with [`GHRepo::from_url()`]
+/// - From a GitHub URL or a string of the form `{owner}/{name}` via the
+///   [`FromStr`] trait or with `s.parse::<GHRepo>()`
+/// - From a GitHub URL, a string of the form `{owner}/{name}`, or a bare
+///   repository name with the owner defaulting to a given value with
+///   [`GHRepo::from_str_with_owner()`]
+///
+/// Comparisons and conversions to strings all treat `GHRepo` instances as
+/// strings of the form `{owner}/{name}` (sometimes called the repository's
+/// "full name").
+///
+/// When the `serde` feature is enabled, `GHRepo` instances can be serialized &
+/// deserialized with the `serde` library.  Serialization produces a string of
+/// the form `{owner}/{name}`, and deserialization accepts any string of a form
+/// accepted by [`GHRepo::from_str`].
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitHubRepository {
+    fullname: String,
+    slash_pos: usize,
+}
+
+impl GitHubRepository {
+    pub fn new(owner: &str, name: &str) -> Self {
+        Self {
+            fullname: format!("{owner}/{name}"),
+            slash_pos: owner.len(),
+        }
+    }
+
+    /// Retrieve the repository's owner's name
+    pub fn owner(&self) -> &str {
+        match self.fullname.get(..self.slash_pos) {
+            Some(s) => s,
+            None => unreachable!("slash_pos should be valid char index"),
+        }
+    }
+
+    /// Retrieve the repository's base name
+    pub fn name(&self) -> &str {
+        match self.fullname.get(self.slash_pos + 1..) {
+            Some(s) => s,
+            None => unreachable!("slash_pos + 1 should be valid char index"),
+        }
+    }
+
+    /// Convert to a reference to a string of the form `{owner}/{name}`
+    pub fn as_str(&self) -> &str {
+        &self.fullname
+    }
+
+    /// Returns the base URL for accessing the repository via the GitHub REST
+    /// API; this is a string of the form
+    /// `https://api.github.com/repos/{owner}/{name}`.
+    pub fn api_url(&self) -> String {
+        format!("https://api.github.com/repos/{}", self.fullname)
+    }
+
+    /// Returns the URL for cloning the repository over HTTPS
+    pub fn clone_url(&self) -> String {
+        format!("https://github.com/{}.git", self.fullname)
+    }
+
+    /// Returns the URL for cloning the repository via the native Git protocol
+    pub fn git_url(&self) -> String {
+        format!("git://github.com/{}.git", self.fullname)
+    }
+
+    /// Returns the URL for the repository's web interface
+    pub fn html_url(&self) -> String {
+        format!("https://github.com/{}", self.fullname)
+    }
+
+    /// Returns the URL for cloning the repository over SSH
+    pub fn ssh_url(&self) -> String {
+        format!("git@github.com:{}.git", self.fullname)
+    }
+
+    /// Parse a repository from a GitHub repository URL.  The following URL
+    /// formats are recognized:
+    ///
+    /// - `[http[s]://[<username>[:<password>]@]][www.]github.com/<owner>/<name>[.git][/]`
+    /// - `[http[s]://]api.github.com/repos/<owner>/<name>`
+    /// - `git://github.com/<owner>/<name>[.git]`
+    /// - `git@github.com:<owner>/<name>[.git]`
+    /// - `ssh://git@github.com/<owner>/<name>[.git]`
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParseError`] if the given URL is not in one of the above
+    /// formats
+    pub fn from_url(s: &str) -> Result<Self, ParseError> {
+        match parse_github_url(s) {
+            Some((owner, name)) => Ok(Self::new(owner, name)),
+            None => Err(ParseError::Spec(s.to_string())),
+        }
+    }
+}
+
+impl From<GitHubRepository> for String {
+    /// Convert the repository to a string of the form `{owner}/{name}`
+    fn from(value: GitHubRepository) -> String {
+        value.fullname
+    }
+}
+
+impl fmt::Debug for GitHubRepository {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.fullname)
+    }
+}
+
+impl fmt::Display for GitHubRepository {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.fullname)
+    }
+}
+
+impl PartialEq<str> for GitHubRepository {
+    /// Compare the repository as though it were a string of the form
+    /// `{owner}/{name}`
+    fn eq(&self, other: &str) -> bool {
+        self.fullname == other
+    }
+}
+
+impl<'a> PartialEq<&'a str> for GitHubRepository {
+    /// Compare the repository as though it were a string of the form
+    /// `{owner}/{name}`
+    fn eq(&self, other: &&'a str) -> bool {
+        &self.fullname == other
+    }
+}
+
+impl PartialOrd<str> for GitHubRepository {
+    /// Compare the repository as though it were a string of the form
+    /// `{owner}/{name}`
+    fn partial_cmp(&self, other: &str) -> Option<Ordering> {
+        Some((*self.fullname).cmp(other))
+    }
+}
+
+impl<'a> PartialOrd<&'a str> for GitHubRepository {
+    /// Compare the repository as though it were a string of the form
+    /// `{owner}/{name}`
+    fn partial_cmp(&self, other: &&'a str) -> Option<Ordering> {
+        Some((*self.fullname).cmp(other))
+    }
+}
+
+impl std::ops::Deref for GitHubRepository {
+    type Target = str;
+
+    /// Dereference to a string of the form `{owner}/{name}`
+    fn deref(&self) -> &str {
+        &self.fullname
+    }
+}
+
+impl AsRef<str> for GitHubRepository {
+    /// Convert to a reference to a string of the form `{owner}/{name}`
+    fn as_ref(&self) -> &str {
+        &self.fullname
+    }
+}
+
+impl FromStr for GitHubRepository {
+    type Err = ParseError;
+
+    /// Parse a GitHub repository specifier.  This can be either a URL (as
+    /// accepted by [`GHRepo::from_url()`]) or a string in the form
+    /// `{owner}/{name}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParseError`] if `s` is not a valid URL or repository
+    /// specifier
+    fn from_str(s: &str) -> Result<Self, ParseError> {
+        match split_owner_name(s) {
+            Some((owner, _name, "")) => Ok(GitHubRepository {
+                fullname: s.to_owned(),
+                slash_pos: owner.len(),
+            }),
+            _ => GitHubRepository::from_url(s),
+        }
+    }
+}
+
+impl TryFrom<String> for GitHubRepository {
+    type Error = ParseError;
+
+    /// Construct a `GHRepo` from a `String` of the form `{owner}/{name}`.
+    ///
+    /// Note that, unlike [`GHRepo::from_str()`], this trait does not accept
+    /// repository URLs.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ParseError`] if `s` is not a valid repository specifier
+    fn try_from(s: String) -> Result<Self, ParseError> {
+        match split_owner_name(&s) {
+            Some((owner, _name, "")) => {
+                let slash_pos = owner.len();
+                Ok(GitHubRepository {
+                    fullname: s,
+                    slash_pos,
+                })
+            }
+            _ => Err(ParseError::Spec(s)),
+        }
+    }
+}
+
+/// A local Git repository.
+///
+/// This struct provides a small number of methods for inspecting a local Git
+/// repository, generally with the goal of determining the GitHub repository
+/// that it's a clone of.
+///
+/// The custom methods all require Git to be installed in order to work.  I am
+/// not certain of the minimal viable Git version, but they should work with
+/// any Git as least as far back as version 1.7.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct LocalRepo {
+    path: PathBuf,
+}
+
+impl LocalRepo {
+    /// Create a [`LocalRepo`] for operating on the repository at or containing
+    /// the directory `dirpath`.
+    ///
+    /// No validation is done as to whether `dirpath` is a Git repository or
+    /// even an extant directory.
+    pub fn new<P: AsRef<Path>>(dirpath: P) -> Self {
+        LocalRepo {
+            path: dirpath.as_ref().to_path_buf(),
+        }
+    }
+
+    /// Create a [`LocalRepo`] for operating on the repository at or containing
+    /// the current directory.
+    ///
+    /// The path to the current directory is saved at the time the function is
+    /// called; thus, if the current directory changes later, the `LocalRepo`
+    /// will continue to operate on the original directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LocalRepoError`] if [`std::env::current_dir()`] failed
+    pub fn for_cwd() -> Result<Self, LocalRepoError> {
+        Ok(LocalRepo {
+            path: env::current_dir().map_err(LocalRepoError::CurdirError)?,
+        })
+    }
+
+    /// Returns the path that was given to [`LocalRepo::new()`] or obtained by
+    /// [`LocalRepo::for_cwd()`]
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
+    /// Tests whether the directory is either a Git repository or contained in
+    /// one
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LocalRepoError`] if the invoked Git commit fails to execute
+    pub fn is_git_repo(&self) -> Result<bool, LocalRepoError> {
+        Ok(Command::new("git")
+            .args(["rev-parse", "--git-dir"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .current_dir(&self.path)
+            .status()
+            .map_err(LocalRepoError::CouldNotExecute)?
+            .success())
+    }
+
+    /// (Private) Run a Git command in the local repository and return the
+    /// trimmed output
+    fn read(&self, args: &[&str]) -> Result<String, LocalRepoError> {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&self.path)
+            .stderr(Stdio::inherit())
+            .output()
+            .map_err(LocalRepoError::CouldNotExecute)?;
+        if out.status.success() {
+            Ok(str::from_utf8(&out.stdout)?.trim().to_string())
+        } else {
+            Err(LocalRepoError::CommandFailed(out.status))
+        }
+    }
+
+    /// Get the current branch of the repository
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LocalRepoError`] if the invoked Git commit fails to execute
+    /// or returns a nonzero status, if the command's output is invalid UTF-8,
+    /// or if the repository is in a detached `HEAD` state
+    pub fn current_branch(&self) -> Result<String, LocalRepoError> {
+        match self.read(&["symbolic-ref", "--short", "-q", "HEAD"]) {
+            Err(LocalRepoError::CommandFailed(rc)) if rc.code() == Some(1) => {
+                Err(LocalRepoError::DetachedHead)
+            }
+            r => r,
+        }
+    }
+
+    /// Determines the GitHub repository that the local repository is a clone
+    /// of by parsing the URL for the specified Git remote
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LocalRepoError`] if the invoked Git commit fails to execute
+    /// or returns a nonzero status, if the command's output is invalid UTF-8,
+    /// if the given remote does not exist, or if the URL for the given remote
+    /// is not a valid GitHub URL
+    pub fn github_remote(&self, remote: &str) -> Result<GitHubRepository, LocalRepoError> {
+        match self.read(&["remote", "get-url", "--", remote]) {
+            Ok(url) => Ok(GitHubRepository::from_url(&url)?),
+            Err(LocalRepoError::CommandFailed(r)) if r.code() == Some(2) => {
+                Err(LocalRepoError::NoSuchRemote(remote.to_string()))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Determines the GitHub repository for the upstream remote of the given
+    /// branch of the local repository
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LocalRepoError`] if the invoked Git commit fails to execute
+    /// or returns a nonzero status, if the command's output is invalid UTF-8,
+    /// if the branch does not have a remote configured, if the remote
+    /// does not exist, or if the URL for the remote is not a valid GitHub URL
+    pub fn branch_upstream(&self, branch: &str) -> Result<GitHubRepository, LocalRepoError> {
+        match self.read(&["config", "--get", "--", &format!("branch.{branch}.remote")]) {
+            Ok(upstream) => self.github_remote(&upstream),
+            Err(LocalRepoError::CommandFailed(r)) if r.code() == Some(1) => {
+                Err(LocalRepoError::NoUpstream(branch.to_string()))
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Error returned when a [`LocalRepo`] method fails
+#[derive(Debug)]
+pub enum LocalRepoError {
+    /// Returned when the Git command could not be executed
+    CouldNotExecute(io::Error),
+
+    /// Returned when the Git command returned nonzero
+    CommandFailed(ExitStatus),
+
+    /// Returned by [`LocalRepo::for_cwd()`] if [`std::env::current_dir()`]
+    /// errored
+    CurdirError(io::Error),
+
+    /// Returned by [`LocalRepo::current_branch()`] if the repository is in a
+    /// detached `HEAD` state
+    DetachedHead,
+
+    /// Returned by [`LocalRepo::github_remote()`] if the named remote does not
+    /// exist.  The field is the name of the nonexistent remote.
+    NoSuchRemote(String),
+
+    /// Returned by [`LocalRepo::branch_upstream()`] if the given branch does
+    /// not have an upstream remote configured.  (This includes the situation
+    /// in which the branch does not exist.)  The field is the name of the
+    /// queried branch.
+    NoUpstream(String),
+
+    /// Returned when the output from Git could not be decoded
+    InvalidUtf8(str::Utf8Error),
+
+    /// Returned when the remote URL is not a GitHub URL
+    InvalidRemoteURL(ParseError),
+}
+
+impl fmt::Display for LocalRepoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LocalRepoError::CouldNotExecute(e) => {
+                write!(f, "failed to execute Git command: {e}")
+            }
+            LocalRepoError::CommandFailed(r) => {
+                write!(f, "Git command exited unsuccessfully: {r}")
+            }
+            LocalRepoError::CurdirError(e) => {
+                write!(f, "could not determine current directory: {e}")
+            }
+            LocalRepoError::DetachedHead => {
+                write!(f, "Git repository is in a detached HEAD state")
+            }
+            LocalRepoError::NoSuchRemote(remote) => {
+                write!(f, "no such remote in Git repository: {remote:?}")
+            }
+            LocalRepoError::NoUpstream(branch) => {
+                write!(
+                    f,
+                    "no upstream remote configured for Git branch: {branch:?}"
+                )
+            }
+            LocalRepoError::InvalidUtf8(e) => {
+                write!(f, "failed to decode output from Git command: {e}")
+            }
+            LocalRepoError::InvalidRemoteURL(e) => {
+                write!(f, "repository remote URL is not a GitHub URL: {e}")
+            }
+        }
+    }
+}
+
+impl error::Error for LocalRepoError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            LocalRepoError::CurdirError(e) | LocalRepoError::CouldNotExecute(e) => Some(e),
+            LocalRepoError::DetachedHead
+            | LocalRepoError::CommandFailed(_)
+            | LocalRepoError::NoSuchRemote(_)
+            | LocalRepoError::NoUpstream(_) => None,
+            LocalRepoError::InvalidUtf8(e) => Some(e),
+            LocalRepoError::InvalidRemoteURL(e) => Some(e),
+        }
+    }
+}
+
+impl From<str::Utf8Error> for LocalRepoError {
+    fn from(e: str::Utf8Error) -> LocalRepoError {
+        LocalRepoError::InvalidUtf8(e)
+    }
+}
+
+impl From<ParseError> for LocalRepoError {
+    fn from(e: ParseError) -> LocalRepoError {
+        LocalRepoError::InvalidRemoteURL(e)
+    }
+}
