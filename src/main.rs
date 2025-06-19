@@ -13,7 +13,7 @@
 )]
 
 use std::env;
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::net::TcpStream;
 use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, Command as ClapCommand};
 mod parser;
 mod repo;
 
-use repo::LocalRepo;
+use repo::{GitRepository, is_git_repo};
 
 const LOCALHOST: &str = "localhost";
 const OPEN: &str = "/usr/bin/open";
@@ -74,19 +74,10 @@ fn main() {
         .to_string_lossy()
         .to_string();
 
-    let remote_path = if paths.is_empty() {
-        let local = LocalRepo::new(&current_dir);
-        let branch = local.current_branch().unwrap_or("main".to_string());
-
-        let remote = local
-            .branch_upstream(&branch)
-            .ok()
-            .map_or(current_dir.clone(), |repo| repo.html_url());
-
-        match branch.as_str() {
-            "develop" | "main" | "master" => remote,
-            _ => format!("{remote}/tree/{branch}"),
-        }
+    let remote_path = if paths.is_empty() && is_git_repo(&current_dir) {
+        GitRepository::from_path(&current_dir)
+            .expect("Could not open Git repository")
+            .http_url()
     } else {
         match paths.join(" ") {
             path if path == "." => current_dir.clone(),
@@ -136,20 +127,25 @@ fn main() {
 
     if matches.get_flag("print") {
         println!("{remote_path}");
-    } else if ssh_tty {
+        return;
+    }
+
+    if ssh_tty {
         let mut stream = TcpStream::connect((LOCALHOST, PORT))
             .expect("Unable to create a socket for localhost:2226");
 
         stream
             .write_all(remote_path.as_bytes())
             .expect("Couldn't write remote path to socket.");
-    } else {
-        let mut args = vec![remote_path.as_str()];
 
-        if remote_path.contains("://") {
-            args.insert(0, "--background");
-        }
-
-        let _ = Command::new(OPEN).args(&args).exec();
+        return;
     }
+
+    let mut args = vec![remote_path.as_str()];
+
+    if remote_path.contains("://") {
+        args.insert(0, "--background");
+    }
+
+    let _ = Command::new(OPEN).args(&args).exec();
 }

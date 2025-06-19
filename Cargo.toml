@@ -1,6 +1,6 @@
 [package]
 name = "magic-opener"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Dan Sully"]
 edition = "2024"
 description = "An 'open' replacement that tries to do the right thing."
@@ -21,9 +21,10 @@ clap = { version = "^4.5", default-features = false, features = [
   "std",
   "usage",
 ] }
+thiserror = "2"
 
 [dev-dependencies]
-rstest = "0"
+testresult = "0"
 
 [profile.release]
 strip = "debuginfo"
