@@ -15,7 +15,7 @@ pub enum RepositoryError {
     #[error("Git command exited unsuccessfully: {0}")]
     CommandFailed(ExitStatus),
 
-    #[error("No such remote in Git repository: {0}")]
+    #[error("Found a Git repository, but no remote URL is set for '{0}'")]
     NoSuchRemote(String),
 
     #[error("Failed to decode output from Git command: {0}")]
@@ -132,7 +132,7 @@ fn git(path: impl AsRef<Path>, args: &[&str]) -> Result<String, RepositoryError>
     let out = Command::new("git")
         .args(args)
         .current_dir(path)
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::null())
         .output()
         .map_err(RepositoryError::CouldNotExecute)?;
     if out.status.success() {

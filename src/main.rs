@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, Command as ClapCommand};
 mod parser;
 mod repo;
 
-use repo::{GitRepository, is_git_repo};
+use repo::{GitRepository, RepositoryError, is_git_repo};
 
 const LOCALHOST: &str = "localhost";
 const OPEN: &str = "/usr/bin/open";
@@ -75,9 +75,17 @@ fn main() {
         .to_string();
 
     let remote_path = if paths.is_empty() && is_git_repo(&current_dir) {
-        GitRepository::from_path(&current_dir)
-            .expect("Could not open Git repository")
-            .http_url()
+        match GitRepository::from_path(&current_dir) {
+            Ok(r) => r.http_url(),
+            Err(RepositoryError::NoSuchRemote(_)) => {
+                println!("Found a Git repository, but no remote URL is set.");
+                current_dir.clone()
+            }
+            Err(e) => {
+                println!("Unknown error while trying to get remote URL: {e}");
+                return;
+            }
+        }
     } else {
         match paths.join(" ") {
             path if path == "." => current_dir.clone(),
