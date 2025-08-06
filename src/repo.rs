@@ -97,6 +97,44 @@ impl GitRepository {
         format!("git@{}:{}/{}.git", self.host, self.org, self.name)
     }
 
+    /// Returns the URL for viewing a specific commit
+    pub fn commit_url(&self, hash: &str) -> String {
+        format!(
+            "https://{}/{}/{}/commit/{}",
+            self.host, self.org, self.name, hash
+        )
+    }
+
+    /// Returns the URL for viewing a pull request
+    pub fn pr_url(&self, pr_number: &str) -> String {
+        format!(
+            "https://{}/{}/{}/pull/{}",
+            self.host, self.org, self.name, pr_number
+        )
+    }
+
+    /// Try to find a PR number from a commit message
+    pub fn pr_for_commit(&self, hash: &str) -> Option<String> {
+        if let Some(path) = &self.path {
+            //
+            if let Ok(message) = git(path, &["log", "-1", "--pretty=%B", hash]) {
+                //
+                if let Some(captures) = message.find('#') {
+                    let after_hash = &message[captures + 1..];
+                    let pr_number: String = after_hash
+                        .chars()
+                        .take_while(char::is_ascii_digit)
+                        .collect();
+
+                    if !pr_number.is_empty() {
+                        return Some(pr_number);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     pub fn current_branch(&self) -> String {
         self.path
             .as_ref()
@@ -113,6 +151,43 @@ impl GitRepository {
             }
             Err(e) => Err(e),
         }
+    }
+
+    pub fn url(current_dir: &str, paths: &[String]) -> Result<String, RepositoryError> {
+        let is_git = is_git_repo(current_dir);
+
+        let join_paths = || match paths.join(" ") {
+            path if path == "." => current_dir.to_string(),
+            path => path,
+        };
+
+        if !is_git {
+            return Ok(join_paths());
+        }
+
+        let r = Self::from_path(current_dir)?;
+
+        if paths.is_empty() {
+            return Ok(r.http_url());
+        }
+
+        if paths.len() == 1 {
+            let arg = &paths[0];
+            let is_commit = is_valid_commit_hash(arg);
+
+            if is_commit || is_pr_number(arg) {
+                return if is_commit {
+                    match r.pr_for_commit(arg) {
+                        Some(pr_number) => Ok(r.pr_url(&pr_number)),
+                        None => Ok(r.commit_url(arg)),
+                    }
+                } else {
+                    Ok(r.pr_url(arg))
+                };
+            }
+        }
+
+        Ok(join_paths())
     }
 }
 
@@ -144,6 +219,14 @@ fn git(path: impl AsRef<Path>, args: &[&str]) -> Result<String, RepositoryError>
 
 pub fn is_git_repo(path: impl AsRef<Path>) -> bool {
     git(&path, &["rev-parse", "--git-dir"]).is_ok()
+}
+
+pub fn is_valid_commit_hash(hash: &str) -> bool {
+    hash.len() >= 7 && hash.len() <= 40 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+pub fn is_pr_number(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
 }
 
 #[cfg(test)]

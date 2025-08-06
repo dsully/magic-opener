@@ -13,7 +13,7 @@
 )]
 
 use std::env;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::net::TcpStream;
 use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, Command as ClapCommand};
 mod parser;
 mod repo;
 
-use repo::{GitRepository, RepositoryError, is_git_repo};
+use repo::{GitRepository, RepositoryError};
 
 const LOCALHOST: &str = "localhost";
 const OPEN: &str = "/usr/bin/open";
@@ -74,22 +74,15 @@ fn main() {
         .to_string_lossy()
         .to_string();
 
-    let remote_path = if paths.is_empty() && is_git_repo(&current_dir) {
-        match GitRepository::from_path(&current_dir) {
-            Ok(r) => r.http_url(),
-            Err(RepositoryError::NoSuchRemote(_)) => {
-                println!("Found a Git repository, but no remote URL is set.");
-                current_dir.clone()
-            }
-            Err(e) => {
-                println!("Unknown error while trying to get remote URL: {e}");
-                return;
-            }
+    let remote_path = match GitRepository::url(&current_dir, &paths) {
+        Ok(url) => url,
+        Err(RepositoryError::NoSuchRemote(_)) => {
+            println!("Found a Git repository, but no remote URL is set.");
+            current_dir.clone()
         }
-    } else {
-        match paths.join(" ") {
-            path if path == "." => current_dir.clone(),
-            path => path,
+        Err(e) => {
+            println!("Unknown error while trying to get remote URL: {e}");
+            return;
         }
     };
 
