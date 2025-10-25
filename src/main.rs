@@ -13,7 +13,7 @@
 )]
 
 use std::env;
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::net::TcpStream;
 use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
@@ -31,11 +31,10 @@ const PORT: u16 = 2226;
 
 fn expand_tilde(path: &str) -> String {
     //
-    if path.starts_with("~/") || path == "~" {
-        if let Ok(home) = env::var("HOME") {
+    if (path.starts_with("~/") || path == "~")
+        && let Ok(home) = env::var("HOME") {
             return path.replacen('~', &home, 1);
         }
-    }
 
     path.to_string()
 }
@@ -63,16 +62,9 @@ fn main() {
 
     let matches = cli.get_matches();
 
-    let paths: Vec<String> = matches
-        .get_many::<String>("path")
-        .unwrap_or_default()
-        .cloned()
-        .collect();
+    let paths: Vec<String> = matches.get_many::<String>("path").unwrap_or_default().cloned().collect();
 
-    let current_dir = env::current_dir()
-        .expect("Failed to get current directory")
-        .to_string_lossy()
-        .to_string();
+    let current_dir = env::current_dir().expect("Failed to get current directory").to_string_lossy().to_string();
 
     let remote_path = match GitRepository::url(&current_dir, &paths) {
         Ok(url) => url,
@@ -87,21 +79,11 @@ fn main() {
     };
 
     if remote_path.starts_with('-') {
-        let command = if remote_path == "--help" {
-            vec!["-h".to_string()]
-        } else {
-            paths
-        };
+        let command = if remote_path == "--help" { vec!["-h".to_string()] } else { paths };
 
-        let output = Command::new(OPEN)
-            .args(command)
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to run command");
+        let output = Command::new(OPEN).args(command).stderr(Stdio::inherit()).output().expect("Failed to run command");
 
-        stdout()
-            .write_all(&output.stderr)
-            .expect("Failed to write to stdout");
+        stdout().write_all(&output.stderr).expect("Failed to write to stdout");
 
         process::exit(0);
     }
@@ -112,8 +94,7 @@ fn main() {
         remote_path.clone()
     } else if ssh_tty {
         //
-        let client_home = env::var("SSH_CLIENT_HOME")
-            .expect("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.");
+        let client_home = env::var("SSH_CLIENT_HOME").expect("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.");
 
         let expanded_path = expand_tilde(&remote_path);
 
@@ -132,12 +113,9 @@ fn main() {
     }
 
     if ssh_tty {
-        let mut stream = TcpStream::connect((LOCALHOST, PORT))
-            .expect("Unable to create a socket for localhost:2226");
+        let mut stream = TcpStream::connect((LOCALHOST, PORT)).expect("Unable to create a socket for localhost:2226");
 
-        stream
-            .write_all(remote_path.as_bytes())
-            .expect("Couldn't write remote path to socket.");
+        stream.write_all(remote_path.as_bytes()).expect("Couldn't write remote path to socket.");
 
         return;
     }

@@ -18,11 +18,7 @@ where
 /// If `s` starts with a valid GitHub organization name, return the org and the remainder of `s`.
 fn split_org(s: &str) -> Option<(&str, &str)> {
     let (org, rem) = span(s, is_org_char);
-    if org.is_empty() || org.eq_ignore_ascii_case("none") {
-        None
-    } else {
-        Some((org, rem))
-    }
+    if org.is_empty() || org.eq_ignore_ascii_case("none") { None } else { Some((org, rem)) }
 }
 
 fn is_org_char(c: char) -> bool {
@@ -37,11 +33,7 @@ fn split_name(s: &str) -> Option<(&str, &str)> {
         Some(i) if name.get(i..).unwrap_or("").eq_ignore_ascii_case(DOTGIT) => s.split_at(i),
         _ => (name, rem),
     };
-    if name.is_empty() || name == "." || name == ".." {
-        None
-    } else {
-        Some((name, rem))
-    }
+    if name.is_empty() || name == "." || name == ".." { None } else { Some((name, rem)) }
 }
 
 fn is_name_char(c: char) -> bool {
@@ -87,10 +79,7 @@ static START_PATTERNS: &[(&[Token], State)] = &[
     (&[Token::CaseFold("http://")], State::Http),
     (&[Token::CaseFold("git://")], State::OrgNameGit),
     (&[Token::Literal("git@")], State::OrgNameGit),
-    (
-        &[Token::CaseFold("ssh://"), Token::Literal("git@")],
-        State::OrgNameGit,
-    ),
+    (&[Token::CaseFold("ssh://"), Token::Literal("git@")], State::OrgNameGit),
 ];
 
 /// If `s` is a valid Git repository URL, return the host, repository org &
@@ -129,10 +118,7 @@ pub fn parse_git_url(s: &str) -> Option<(&str, &str, &str)> {
                 let parsed_host = parser.consume_host()?;
                 host = Some(parsed_host);
 
-                match parser
-                    .consume("/repos/".into())
-                    .or_else(|| parser.consume(SLASH.into()))
-                {
+                match parser.consume("/repos/".into()).or_else(|| parser.consume(SLASH.into())) {
                     Some(()) => State::OrgName,
                     None => return None,
                 }
@@ -247,11 +233,10 @@ impl<'a> PullParser<'a> {
     /// followed by a `@`, consume them both.
     fn maybe_consume_userinfo(&mut self) {
         // cf. <https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.1>
-        if let Some((userinfo, s)) = self.data.split_once('@') {
-            if userinfo.chars().all(is_userinfo_char) {
+        if let Some((userinfo, s)) = self.data.split_once('@')
+            && userinfo.chars().all(is_userinfo_char) {
                 self.data = s;
             }
-        }
     }
 
     fn at_end(&self) -> bool {
@@ -301,65 +286,32 @@ mod tests {
     #[test]
     fn test_parse_git_url_https() {
         // Test various hosts with HTTPS
-        assert_eq!(
-            parse_git_url("https://github.com/org/repo"),
-            Some(("github.com", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("https://gitlab.com/org/repo"),
-            Some(("gitlab.com", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("https://bitbucket.org/org/repo.git"),
-            Some(("bitbucket.org", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("https://git.example.com/org/repo"),
-            Some(("git.example.com", "org", "repo"))
-        );
+        assert_eq!(parse_git_url("https://github.com/org/repo"), Some(("github.com", "org", "repo")));
+        assert_eq!(parse_git_url("https://gitlab.com/org/repo"), Some(("gitlab.com", "org", "repo")));
+        assert_eq!(parse_git_url("https://bitbucket.org/org/repo.git"), Some(("bitbucket.org", "org", "repo")));
+        assert_eq!(parse_git_url("https://git.example.com/org/repo"), Some(("git.example.com", "org", "repo")));
     }
 
     #[test]
     fn test_parse_git_url_ssh() {
         // Test SSH format
-        assert_eq!(
-            parse_git_url("git@github.com:org/repo.git"),
-            Some(("github.com", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("git@gitlab.com:org/repo"),
-            Some(("gitlab.com", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("git@git.example.com:org/repo.git"),
-            Some(("git.example.com", "org", "repo"))
-        );
+        assert_eq!(parse_git_url("git@github.com:org/repo.git"), Some(("github.com", "org", "repo")));
+        assert_eq!(parse_git_url("git@gitlab.com:org/repo"), Some(("gitlab.com", "org", "repo")));
+        assert_eq!(parse_git_url("git@git.example.com:org/repo.git"), Some(("git.example.com", "org", "repo")));
     }
 
     #[test]
     fn test_parse_git_url_git_protocol() {
         // Test git:// protocol
-        assert_eq!(
-            parse_git_url("git://github.com/org/repo.git"),
-            Some(("github.com", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("git://gitlab.com/org/repo"),
-            Some(("gitlab.com", "org", "repo"))
-        );
+        assert_eq!(parse_git_url("git://github.com/org/repo.git"), Some(("github.com", "org", "repo")));
+        assert_eq!(parse_git_url("git://gitlab.com/org/repo"), Some(("gitlab.com", "org", "repo")));
     }
 
     #[test]
     fn test_parse_git_url_ssh_full() {
         // Test full SSH format
-        assert_eq!(
-            parse_git_url("ssh://git@github.com/org/repo.git"),
-            Some(("github.com", "org", "repo"))
-        );
-        assert_eq!(
-            parse_git_url("ssh://git@gitlab.com/org/repo"),
-            Some(("gitlab.com", "org", "repo"))
-        );
+        assert_eq!(parse_git_url("ssh://git@github.com/org/repo.git"), Some(("github.com", "org", "repo")));
+        assert_eq!(parse_git_url("ssh://git@gitlab.com/org/repo"), Some(("gitlab.com", "org", "repo")));
     }
 
     #[test]

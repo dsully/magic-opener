@@ -1,7 +1,6 @@
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::str;
+use std::{fmt, str};
 
 use thiserror::Error;
 
@@ -39,7 +38,7 @@ impl GitRepository {
         let url = Self::remote(&path, "origin")?;
 
         let Some((host, org, name)) = parse_git_url(&url) else {
-            return Err(RepositoryError::Spec(url.to_string()));
+            return Err(RepositoryError::Spec(url));
         };
 
         Ok(Self {
@@ -99,18 +98,12 @@ impl GitRepository {
 
     /// Returns the URL for viewing a specific commit
     pub fn commit_url(&self, hash: &str) -> String {
-        format!(
-            "https://{}/{}/{}/commit/{}",
-            self.host, self.org, self.name, hash
-        )
+        format!("https://{}/{}/{}/commit/{}", self.host, self.org, self.name, hash)
     }
 
     /// Returns the URL for viewing a pull request
     pub fn pr_url(&self, pr_number: &str) -> String {
-        format!(
-            "https://{}/{}/{}/pull/{}",
-            self.host, self.org, self.name, pr_number
-        )
+        format!("https://{}/{}/{}/pull/{}", self.host, self.org, self.name, pr_number)
     }
 
     /// Try to find a PR number from a commit message
@@ -121,10 +114,7 @@ impl GitRepository {
                 //
                 if let Some(captures) = message.find('#') {
                     let after_hash = &message[captures + 1..];
-                    let pr_number: String = after_hash
-                        .chars()
-                        .take_while(char::is_ascii_digit)
-                        .collect();
+                    let pr_number: String = after_hash.chars().take_while(char::is_ascii_digit).collect();
 
                     if !pr_number.is_empty() {
                         return Some(pr_number);
@@ -231,8 +221,9 @@ pub fn is_pr_number(s: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use testresult::TestResult;
+
+    use super::*;
 
     #[test]
     fn test_git_repository_from_url() -> TestResult {
