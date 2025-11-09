@@ -1,14 +1,14 @@
 [workspace]
-members = [ "cargo:." ]
+members = ["cargo:."]
 
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.28.6"
+cargo-dist-version = "0.30.1"
 # CI backends to support
 ci = "github"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = [ "aarch64-apple-darwin", "x86_64-unknown-linux-gnu" ]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
 # Which actions to run on pull requests
 pr-run-mode = "plan"
 # Whether to install an updater program
@@ -18,8 +18,8 @@ dist = true
 # Whether to enable GitHub Attestations
 github-attestations = false
 # The installers to generate for each app
-installers = [ "homebrew" ]
+installers = ["homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "dsully/homebrew-tap"
 # Publish jobs to run in CI
-publish-jobs = [ "homebrew" ]
+publish-jobs = ["homebrew"]
