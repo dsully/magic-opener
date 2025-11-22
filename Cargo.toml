@@ -96,7 +96,6 @@ single_match_else = "warn"
 string_add = "warn"
 string_add_assign = "warn"
 string_lit_as_bytes = "warn"
-string_to_string = "warn"
 struct_excessive_bools = "allow"
 style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }

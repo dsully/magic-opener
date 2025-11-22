@@ -1,17 +1,3 @@
-#![deny(clippy::all, clippy::pedantic, clippy::unwrap_used)]
-#![allow(
-    clippy::module_name_repetitions,
-    clippy::missing_errors_doc,
-    clippy::missing_panics_doc,
-
-    // Ignore clippy for the generated file from shadow-rs.
-    // https://github.com/baoyachi/shadow-rs/issues/151
-    clippy::non_ascii_literal,
-    clippy::print_stdout,
-    clippy::needless_raw_strings,
-    clippy::needless_raw_string_hashes
-)]
-
 use std::env;
 use std::io::{Write, stdout};
 use std::net::TcpStream;
