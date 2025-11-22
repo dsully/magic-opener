@@ -1,31 +1,55 @@
 {
-  description = "Magic Opener";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    naersk.url = "github:nix-community/naersk";
+    naersk.inputs.nixpkgs.follows = "nixpkgs";
+
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs = {
-    self,
+    flake-utils,
+    naersk,
     nixpkgs,
+    rust-overlay,
     ...
-  }: let
-    supportedSystems = ["aarch64-darwin" "x86_64-linux" "aarch64-linux" "x86_64-darwin"];
-    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-
-    nixpkgsFor = system:
-      import nixpkgs {
-        inherit system;
-      };
-  in {
-    packages = forAllSystems (
+  }:
+    flake-utils.lib.eachDefaultSystem (
       system: let
-        pkgs = nixpkgsFor system;
-      in {
-        default = pkgs.callPackage ./default.nix {};
+        overlays = [(import rust-overlay)];
+
+        pkgs = (import nixpkgs) {
+          inherit system overlays;
+        };
+
+        toolchain = pkgs.rust-bin.stable.latest.minimal;
+
+        naersk' = pkgs.callPackage naersk {
+          cargo = toolchain;
+          rustc = toolchain;
+        };
+      in rec {
+        # For `nix build` & `nix run`:
+        packages = {
+          default = naersk'.buildPackage {
+            pname = "nix-package-updater";
+            src = ./.;
+          };
+
+          clippy = naersk'.buildPackage {
+            src = ./.;
+            mode = "clippy";
+          };
+        };
+
+        defaultPackage = packages.default;
+
+        # For `nix develop` (optional, can be skipped):
+        devShell = pkgs.mkShell {
+          nativeBuildInputs = with pkgs; [rustc cargo];
+        };
       }
     );
-
-    overlays.default = final: prev: {
-      magic-opener = self.packages.${prev.system}.default;
-    };
-  };
 }
