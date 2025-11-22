@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::{fmt, str};
+use std::str;
 
 use thiserror::Error;
+use tracing::debug;
 
 use crate::parser::parse_git_url;
 
@@ -146,24 +147,30 @@ impl GitRepository {
     pub fn url(current_dir: &str, paths: &[String]) -> Result<String, RepositoryError> {
         let is_git = is_git_repo(current_dir);
 
+        debug!("is_git_repo({current_dir}) = {is_git}");
+
         let join_paths = || match paths.join(" ") {
             path if path == "." => current_dir.to_string(),
             path => path,
         };
 
         if !is_git {
+            debug!("Not a Git repository; returning joined paths: {}", join_paths());
             return Ok(join_paths());
         }
 
         let r = Self::from_path(current_dir)?;
 
         if paths.is_empty() {
+            debug!("No additional paths; returning repository URL: {}", r.http_url());
             return Ok(r.http_url());
         }
 
         if paths.len() == 1 {
             let arg = &paths[0];
             let is_commit = is_valid_commit_hash(arg);
+
+            debug!("is_commit_hash({arg}) = {is_commit}");
 
             if is_commit || is_pr_number(arg) {
                 return if is_commit {
@@ -178,18 +185,6 @@ impl GitRepository {
         }
 
         Ok(join_paths())
-    }
-}
-
-impl fmt::Debug for GitRepository {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.http_url())
-    }
-}
-
-impl fmt::Display for GitRepository {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.http_url())
     }
 }
 

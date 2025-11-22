@@ -10,6 +10,9 @@ mod parser;
 mod repo;
 
 use repo::{GitRepository, RepositoryError};
+use tracing::debug;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, fmt};
 
 const LOCALHOST: &str = "localhost";
 const OPEN: &str = "/usr/bin/open";
@@ -27,6 +30,8 @@ fn expand_tilde(path: &str) -> String {
 }
 
 fn main() {
+    tracing_subscriber::registry().with(fmt::layer()).with(EnvFilter::from_default_env()).init();
+
     let cli = ClapCommand::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
@@ -64,6 +69,8 @@ fn main() {
             return;
         }
     };
+
+    debug!("Remote path resolved to: {}", remote_path);
 
     if remote_path.starts_with('-') {
         let command = if remote_path == "--help" { vec!["-h".to_string()] } else { paths };
@@ -112,6 +119,8 @@ fn main() {
     if remote_path.contains("://") {
         args.insert(0, "--background");
     }
+
+    debug!("Opening with args: {:?}", args);
 
     let _ = Command::new(OPEN).args(&args).exec();
 }
