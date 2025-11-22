@@ -234,9 +234,10 @@ impl<'a> PullParser<'a> {
     fn maybe_consume_userinfo(&mut self) {
         // cf. <https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.1>
         if let Some((userinfo, s)) = self.data.split_once('@')
-            && userinfo.chars().all(is_userinfo_char) {
-                self.data = s;
-            }
+            && userinfo.chars().all(is_userinfo_char)
+        {
+            self.data = s;
+        }
     }
 
     fn at_end(&self) -> bool {

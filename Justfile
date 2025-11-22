@@ -7,7 +7,10 @@ check:
     @cargo check --all
 
 format:
-    @cargo fmt --all
+    @cargo +nightly fmt --all
+    @alejandra .
+    @deadnix .
+    @statix check
 
 format-check:
     @cargo fmt --all -- --check

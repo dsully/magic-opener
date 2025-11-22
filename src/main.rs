@@ -18,9 +18,10 @@ const PORT: u16 = 2226;
 fn expand_tilde(path: &str) -> String {
     //
     if (path.starts_with("~/") || path == "~")
-        && let Ok(home) = env::var("HOME") {
-            return path.replacen('~', &home, 1);
-        }
+        && let Ok(home) = env::var("HOME")
+    {
+        return path.replacen('~', &home, 1);
+    }
 
     path.to_string()
 }
