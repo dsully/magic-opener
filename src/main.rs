@@ -61,11 +61,11 @@ fn main() {
     let remote_path = match GitRepository::url(&current_dir, &paths) {
         Ok(url) => url,
         Err(RepositoryError::NoSuchRemote(_)) => {
-            println!("Found a Git repository, but no remote URL is set.");
+            debug!("Found a Git repository, but no remote URL is set.");
             current_dir.clone()
         }
         Err(e) => {
-            println!("Unknown error while trying to get remote URL: {e}");
+            eprintln!("Unknown error while trying to get remote URL: {e}");
             return;
         }
     };
@@ -114,13 +114,13 @@ fn main() {
         return;
     }
 
-    let mut args = vec![remote_path.as_str()];
+    let args = if remote_path.contains("://") {
+        vec!["--background".to_string(), remote_path]
+    } else {
+        paths
+    };
 
-    if remote_path.contains("://") {
-        args.insert(0, "--background");
-    }
-
-    debug!("Opening with args: {:?}", args);
+    debug!("Opening with args: {args:?}");
 
     let _ = Command::new(OPEN).args(&args).exec();
 }
