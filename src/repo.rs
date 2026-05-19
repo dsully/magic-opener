@@ -82,13 +82,33 @@ impl GitRepository {
     /// Returns the URL for the repository's web interface
     pub fn http_url(&self) -> String {
         let branch = self.current_branch();
-
-        let url = format!("https://{}/{}/{}", self.host, self.org, self.name);
+        let url = self.web_repo_url();
 
         match branch.as_str() {
             "develop" | "main" | "master" => url,
+            _ if self.is_stash() => format!("{url}/browse?at=refs/heads/{branch}"),
             _ => format!("{url}/tree/{branch}"),
         }
+    }
+
+    /// Returns the base web URL for the repository (no branch / path suffix).
+    fn web_repo_url(&self) -> String {
+        if let Some(user) = self.org.strip_prefix('~') {
+            // Bitbucket Server / Stash personal repository.
+            format!("https://{}/users/{}/repos/{}", self.host, user, self.name)
+        } else if self.is_stash() {
+            // Bitbucket Server / Stash project repository.
+            format!("https://{}/projects/{}/repos/{}", self.host, self.org, self.name)
+        } else {
+            format!("https://{}/{}/{}", self.host, self.org, self.name)
+        }
+    }
+
+    fn is_stash(&self) -> bool {
+        // Bitbucket Server (a.k.a. Stash) uses /projects/<KEY>/repos/<NAME> and
+        // /users/<USER>/repos/<NAME>. Bitbucket Cloud (bitbucket.org) uses the
+        // GitHub-style /<org>/<repo> layout, so don't match on "bitbucket".
+        self.org.starts_with('~') || self.host.contains("stash")
     }
 
     /// Returns the URL for cloning the repository over SSH
@@ -99,12 +119,22 @@ impl GitRepository {
 
     /// Returns the URL for viewing a specific commit
     pub fn commit_url(&self, hash: &str) -> String {
-        format!("https://{}/{}/{}/commit/{}", self.host, self.org, self.name, hash)
+        let base = self.web_repo_url();
+        if self.is_stash() {
+            format!("{base}/commits/{hash}")
+        } else {
+            format!("{base}/commit/{hash}")
+        }
     }
 
     /// Returns the URL for viewing a pull request
     pub fn pr_url(&self, pr_number: &str) -> String {
-        format!("https://{}/{}/{}/pull/{}", self.host, self.org, self.name, pr_number)
+        let base = self.web_repo_url();
+        if self.is_stash() {
+            format!("{base}/pull-requests/{pr_number}")
+        } else {
+            format!("{base}/pull/{pr_number}")
+        }
     }
 
     /// Try to find a PR number from a commit message
@@ -244,5 +274,28 @@ mod tests {
     #[test]
     fn test_git_repository_invalid() {
         assert!(GitRepository::from_url("invalid-url").is_err());
+    }
+
+    #[test]
+    fn test_stash_personal_repo_urls() -> TestResult {
+        let repo = GitRepository::from_url("ssh://git@stash.atlassian.com/~foo/dotfiles.git")?;
+        assert_eq!(repo.host, "stash.atlassian.com");
+        assert_eq!(repo.org, "~foo");
+        assert_eq!(repo.name, "dotfiles");
+        // No path so current_branch falls back to "main" and skips the branch suffix.
+        assert_eq!(repo.http_url(), "https://stash.atlassian.com/users/foo/repos/dotfiles");
+        assert_eq!(repo.commit_url("abc1234"), "https://stash.atlassian.com/users/foo/repos/dotfiles/commits/abc1234");
+        assert_eq!(repo.pr_url("42"), "https://stash.atlassian.com/users/foo/repos/dotfiles/pull-requests/42");
+        Ok(())
+    }
+
+    #[test]
+    fn test_stash_project_repo_urls() -> TestResult {
+        let repo = GitRepository::from_url("ssh://git@stash.atlassian.com/PROJ/repo.git")?;
+        assert_eq!(repo.host, "stash.atlassian.com");
+        assert_eq!(repo.org, "PROJ");
+        assert_eq!(repo.name, "repo");
+        assert_eq!(repo.http_url(), "https://stash.atlassian.com/projects/PROJ/repos/repo");
+        Ok(())
     }
 }

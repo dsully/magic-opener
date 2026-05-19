@@ -16,9 +16,17 @@ where
 }
 
 /// If `s` starts with a valid GitHub organization name, return the org and the remainder of `s`.
+///
+/// A leading `~` is allowed to support Bitbucket Server / Stash personal
+/// repository paths like `~username`.
 fn split_org(s: &str) -> Option<(&str, &str)> {
-    let (org, rem) = span(s, is_org_char);
-    if org.is_empty() || org.eq_ignore_ascii_case("none") { None } else { Some((org, rem)) }
+    let after_tilde = s.strip_prefix('~').unwrap_or(s);
+    let (bare, rem) = span(after_tilde, is_org_char);
+    if bare.is_empty() || bare.eq_ignore_ascii_case("none") {
+        return None;
+    }
+    let org_len = s.len() - rem.len();
+    Some((&s[..org_len], rem))
 }
 
 fn is_org_char(c: char) -> bool {
@@ -322,6 +330,24 @@ mod tests {
         assert_eq!(parse_git_url("https://"), None);
         assert_eq!(parse_git_url("https://example.com"), None);
         assert_eq!(parse_git_url(""), None);
+    }
+
+    #[test]
+    fn test_parse_git_url_stash_personal() {
+        // Bitbucket Server / Stash personal repos use a leading `~` on the user
+        // segment. Make sure the URL parses and the org keeps the `~`.
+        assert_eq!(
+            parse_git_url("ssh://git@stash.atlassian.com/~foo/dotfiles.git"),
+            Some(("stash.atlassian.com", "~foo", "dotfiles"))
+        );
+        assert_eq!(
+            parse_git_url("https://stash.atlassian.com/~foo/dotfiles.git"),
+            Some(("stash.atlassian.com", "~foo", "dotfiles"))
+        );
+        assert_eq!(
+            parse_git_url("git@stash.atlassian.com:~foo/dotfiles.git"),
+            Some(("stash.atlassian.com", "~foo", "dotfiles"))
+        );
     }
 
     #[test]
