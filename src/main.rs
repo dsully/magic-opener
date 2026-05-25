@@ -89,11 +89,12 @@ fn main() {
     } else if ssh_tty {
         //
         let client_home = env::var("SSH_CLIENT_HOME").expect("No $SSH_CLIENT_HOME set! It must be set in the SSH client config.");
+        let client_mount = env::var("SSH_CLIENT_MOUNT").expect("No $SSH_CLIENT_MOUNT set! It must be set in the SSH client config.");
 
         let expanded_path = expand_tilde(&remote_path);
 
-        if expanded_path.starts_with("/bits") {
-            format!("{client_home}/Mounts{expanded_path}")
+        if expanded_path.starts_with("/bits") || expanded_path.starts_with("/home") {
+            format!("{client_home}/{client_mount}{expanded_path}")
         } else {
             expanded_path
         }

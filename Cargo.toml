@@ -1,6 +1,6 @@
 [package]
 name = "magic-opener"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2024"
 description = "An 'open' replacement that tries to do the right thing."
 readme = "README.md"
@@ -15,14 +15,14 @@ name = "open"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.53", default-features = false, features = [
+clap = { version = "4.6.1", default-features = false, features = [
   "help",
   "std",
   "usage",
 ] }
-thiserror = "2.0.17"
-tracing = "0.1.43"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
 testresult = "0.4.1"
